@@ -1,0 +1,83 @@
+using UnityEngine;
+using System.Collections;
+
+public class PlayerComboSystem : MonoBehaviour {
+
+    //public Attributes
+    public int maxCombo = 3;
+    private int comboState = 0;
+    private float lastPress = 3.0f;
+    private float restartTimer = 1.0f;
+    private bool isAttacking = false;
+
+    BoxCollider meleeColli;
+
+	// Use this for initialization
+	void Start () 
+    {
+        /*Looks for a boxCollider called 'MeleeBox', which is a collider around a weapon*/
+        meleeColli = GameObject.Find("MeleeBox").GetComponent<BoxCollider>();
+	}
+	
+	// Update is called once per frame
+	void Update () 
+    {
+        CheackComboLimit();
+        ComboSystem();
+
+        if (isAttacking)
+        {
+            ComboResetTimer();
+        }
+	}
+
+    /*Checks the current count of attacks made in resets if amount is too hit*/
+    void CheackComboLimit()
+    {
+        if (comboState >= maxCombo)
+        {
+            comboState = 0;
+        }
+    }
+
+    /*Times how long the player has to complete a combo before it 
+    resets the combo to the inital animation*/
+    void ComboResetTimer()
+    {
+        lastPress -= Time.deltaTime;
+
+            if (lastPress <= 0)
+            {
+                isAttacking = false;
+                comboState = 0;
+                lastPress = restartTimer;
+
+                Debug.Log("Combo Was Reset");
+            }
+    }
+
+    /*Takes in the user input to see if the attack button 
+    was pressed, then deals damage and plays the animations accordingly*/
+    void ComboSystem()
+    {
+        if (Input.GetButtonDown("Fire1") && comboState == 0)
+        {
+            comboState ++;
+            isAttacking = true;
+            meleeColli.size = new Vector3(1.0f, 1.0f, 1.0f);
+            Debug.Log("I");
+        }
+        else if (Input.GetButtonDown("Fire1") && comboState == 1)
+        {
+            comboState++;
+            meleeColli.size = new Vector3(1.0f, 1.0f, 1.0f);
+            Debug.Log("Hit");
+        }
+        else if (Input.GetButtonDown("Fire1") && comboState >= 2)
+        {
+            comboState++;
+            meleeColli.size = new Vector3(1.0f, 1.0f, 1.0f);
+            Debug.Log("Three Times");
+        }
+    }
+}
