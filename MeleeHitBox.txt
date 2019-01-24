@@ -1,0 +1,96 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace AbsoluteAbsurdity
+{
+    public class HitBoxManager : MonoBehaviour
+    {
+        public enum ColliderState { Closed, Open, Colliding };
+        public ColliderState e_colliderState;
+
+        public Color inactiveCollisionColor;
+        public Color openCollisionColor;
+        public Color overlapCollisionColor;
+
+        public LayerMask hurtboxLayer;
+        public Vector3 hitBoxVolume;
+
+        // start checking for a collision between attack and object
+        public void StartCollisionCheck(string type, float frameCountValue)
+        {
+            e_colliderState = ColliderState.Open;
+            StartCoroutine(DetectHitboxCollision(type, frameCountValue));
+        }
+
+        // stop checking for collisions
+        public void StopCollisionCheck()
+        {
+            e_colliderState = ColliderState.Closed;
+        }
+
+        public IEnumerator DetectHitboxCollision(string volumeType, float frameCount)
+        {
+            CheckHitBoxVolume(volumeType);
+
+            Collider[] colliders = Physics.OverlapBox(transform.position, hitBoxVolume, Quaternion.identity, hurtboxLayer);
+
+            if (colliders.Length > 0)
+            {   
+                e_colliderState = ColliderState.Colliding;
+                Debug.Log("I hit something");
+            }
+
+            yield return new WaitForSeconds(frameCount);
+            StopCollisionCheck();
+        }
+
+        // return the proper volume of the hitbox the player needs
+        public Vector3 CheckHitBoxVolume(string volumeType)
+        {
+            switch (volumeType)
+            {
+                case "Small":
+                    hitBoxVolume.Set(0.5f, 0.5f, 0.5f);
+                    break;
+                case "Medium":
+                    hitBoxVolume.Set(1f, 1f, 0.5f);
+                    break;
+                case "Long":
+                    hitBoxVolume.Set(1f, 0.5f, 2f);
+                    break;
+            }
+
+            return hitBoxVolume;
+        }
+
+        #region Gizmo Draw Functions
+        private void OnDrawGizmos()
+        {
+            SetGizmoColor();
+
+            Gizmos.matrix = Matrix4x4.TRS(transform.position, transform.rotation, transform.localScale);
+
+            Gizmos.DrawCube(Vector3.zero, new Vector3(hitBoxVolume.x * 2, hitBoxVolume.y * 2, hitBoxVolume.z * 2)); // Because size is halfExtents
+        }
+
+        private void SetGizmoColor()
+        {
+            switch(e_colliderState)
+            {
+                case ColliderState.Closed:
+                    Gizmos.color = inactiveCollisionColor;
+                    break;
+
+                case ColliderState.Open:
+                    Gizmos.color = openCollisionColor;
+                    break;
+
+                case ColliderState.Colliding:
+                    Gizmos.color = overlapCollisionColor;
+                    break;
+            }
+        }
+        #endregion
+    }
+}

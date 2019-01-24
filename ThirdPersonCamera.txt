@@ -1,0 +1,246 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public enum CameraState { FREEORBIT, AIM_ON, COLLIDING };
+
+public class ThirdPersonCamera : MonoBehaviour
+{
+    [SerializeField]
+    private CameraState cameraState;
+
+    public Transform lookAt;
+    public Transform lockedLookAt;
+    public Transform follow;
+    public LayerMask obstaclesMask;
+
+    // Camera Follow
+    private Vector3 originalPosition;
+    private Vector3 desiredPosition;
+    private Vector3 cameraOffset;
+    private bool lockYPostion;
+
+    [Header("Follow Controls")]
+    [Range(1.0f, 20.0f)]
+    public float cameraDistanceAway = 8.0f;
+    [Range(1.0f, 20.0f)]
+    public float cameraDistanceUp = 1.75f;
+    public float zoomEaseDistance;
+    public float easeInDamping;
+    [Range(0.1f, 20.0f)]
+    public float followDamping = 1.75f;
+
+    // Camera Orbit
+    private Vector2 orbitYMinMax = new Vector2(-10.0f, 65.0f);
+    private Vector3 orbitRotation;
+    private Vector3 desiredRotation;
+    private Vector3 referenceRotation;
+
+    [Header("Orbit Controls")]
+    public float orbitYaw;
+    public float orbitPitch;
+    [Range(0.1f, 2.0f)]
+    public float orbitSensetivity = 0.3f;
+    [Range(0.1f, 20.0f)]
+    public float orbitDamping = 5.0f;
+    public bool invertYaw, invertPitch;
+
+    [Header("Collision Parameters")]
+    public float maxDistancetoPlayer = 2.0f;
+    public float minDistanceToPlayer = 1.0f;
+    [Range(0.1f, 1.0f)]
+    public float wallOffset = 0.7f;
+
+    private bool inCollisionMode = false;
+    private bool lerping = false;
+    private float currentLerpTime = 0.0f;
+    [Range(0.1f, 2.0f)]
+    public float maxLerpTime = 0.6f;
+
+    public bool isYOrbitLocked;
+
+    // Use this for initialization
+    void Awake()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        originalPosition = transform.position;
+    }
+
+    // Update is called once per frame
+    void LateUpdate()
+    {
+        OrbitControl();
+        SmoothFollow();
+    }
+
+    /// <summary>
+    /// Allows the camera to follow the players position and adjust its defalut position
+    /// </summary>
+    void SmoothFollow()
+    {
+        cameraOffset.y = cameraDistanceUp;
+
+        Debug.DrawLine(follow.position, transform.position, Color.blue);
+        Debug.DrawLine(lookAt.position, transform.position, Color.magenta);
+        WallCheck();
+        CollisionCheck((follow.position + cameraOffset) - transform.forward * cameraDistanceAway);
+
+        if(cameraState == CameraState.FREEORBIT)
+        {
+            transform.LookAt(lookAt);
+        }
+        else if(cameraState == CameraState.AIM_ON)
+        {
+            transform.LookAt(lockedLookAt);
+            EaseInZoom();
+        }
+    }
+
+    void OrbitControl()
+    {
+        if (!isYOrbitLocked)
+        {
+            // Orbit the camera normally
+            if(invertYaw)
+                orbitYaw += Input.GetAxis("Mouse X") * orbitSensetivity;
+            else if(!invertYaw)
+                orbitYaw -= Input.GetAxis("Mouse X") * orbitSensetivity;
+            
+            if(invertPitch)
+                orbitPitch += Input.GetAxis("Mouse Y") * orbitSensetivity;
+            else if(!invertPitch)
+                orbitPitch -= Input.GetAxis("Mouse Y") * orbitSensetivity;
+
+            orbitPitch = Mathf.Clamp(orbitPitch, orbitYMinMax.x, orbitYMinMax.y);
+
+            orbitRotation.Set(orbitPitch, orbitYaw, 0.0f);
+
+            if(lockYPostion)
+                orbitRotation.x = originalPosition.y;
+
+            desiredRotation = Vector3.Lerp(desiredRotation, new Vector3(orbitRotation.x - follow.position.x, orbitRotation.y - follow.position.y), orbitDamping * Time.deltaTime);
+        }
+        else
+        {
+            // Lock the camera in a position to best view player
+            orbitYaw += Input.GetAxis("Mouse X") * orbitSensetivity;
+            orbitRotation.x = orbitYMinMax.y;
+
+            desiredRotation = Vector3.Lerp(desiredRotation, new Vector3(orbitRotation.x, orbitRotation.y), orbitDamping * Time.deltaTime);
+        }
+
+        transform.eulerAngles = desiredRotation;
+    }
+
+    void EaseInZoom()
+    {
+        lockYPostion = true;
+        //desiredPosition = Vector3.Lerp(transform.position, new Vector3(originalPosition.x, originalPosition.y, originalPosition.z + zoomEaseDistance), easeInDamping * Time.deltaTime);
+        //transform.position = desiredPosition;
+        //Vector3.Lerp(desiredRotation, new Vector3(orbitRotation.x, orbitRotation.y), orbitDamping * Time.deltaTime);
+    }
+
+    void EaseOutZoom()
+    {
+        
+    }
+
+     public void SetState(CameraState setState)
+    {
+        {cameraState = setState;}
+    }
+
+    public CameraState GetCurrentState()
+    {
+        return cameraState;
+    }
+
+    void CollisionCheck(Vector3 refPoint)
+    {
+        RaycastHit hitPoint;
+
+        if (Physics.Linecast(follow.position, refPoint, out hitPoint, obstaclesMask))
+        {
+            Vector3 wallNormal = hitPoint.normal * wallOffset;
+            Vector3 newPoint = hitPoint.point + wallNormal;
+
+            // Detect if the player is obsucured by an obstacle then adjust camera to view player
+            if (Vector3.Distance(Vector3.Lerp(transform.position, newPoint, followDamping * Time.deltaTime), follow.position) <= minDistanceToPlayer)
+            { }
+            else
+            {
+                // if we've just transitioned into collision mode we need to lerp to accomodate for the distance disparity this shift will leave us with
+                if (!inCollisionMode)
+                {
+                    lerping = true;
+                    currentLerpTime = 0;
+                }
+
+                if (currentLerpTime > maxLerpTime)
+                {
+                    lerping = false;
+                    currentLerpTime = 0;
+                }
+
+                if (lerping)
+                {
+                    transform.position = Vector3.Lerp(transform.position, newPoint, (currentLerpTime / maxLerpTime));
+                    currentLerpTime += Time.deltaTime;
+                }
+                else
+                {
+                    transform.position = newPoint;
+                }
+            }
+
+            inCollisionMode = true;
+
+            return;
+        }
+
+        // Follow player without collision adjustments
+        Debug.DrawLine(refPoint, transform.position, Color.blue);
+        float dist = Vector3.Distance(transform.position, refPoint);
+
+        // if we've just transitioned from collision mode to non-collision mode we need to lerp to accomodate for the distance disparity this will leave us with
+        if (inCollisionMode)
+        {
+            lerping = true;
+            currentLerpTime = 0;
+        }
+
+        if (currentLerpTime > maxLerpTime)
+        {
+            lerping = false;
+            currentLerpTime = 0;
+        }
+
+        if (lerping)
+        {
+            transform.position = Vector3.Lerp(transform.position, refPoint, (currentLerpTime / maxLerpTime));
+            currentLerpTime += Time.deltaTime;
+        }
+        else
+        {
+            transform.position = refPoint;
+        }
+
+        isYOrbitLocked = false;
+        inCollisionMode = false;
+    }
+
+    void WallCheck()
+    {
+        Ray rayStart = new Ray(follow.position, -follow.forward);
+        RaycastHit hitPoint;
+
+        // If a wall is detected lock the camera above player
+        if (Physics.SphereCast(rayStart, 0.5f, out hitPoint, wallOffset, obstaclesMask))
+        {
+            isYOrbitLocked = true;
+            Debug.Log("Reached");
+        }
+        else
+            isYOrbitLocked = false;
+    }
+}
